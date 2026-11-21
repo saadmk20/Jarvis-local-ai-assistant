@@ -75,12 +75,15 @@ SYSTEM_PROMPT = (
     "in plain sentences. "
     "You can open a web page in the user's own browser. When the user asks you to open, play, show or take them "
     "to something — or when they are asking for something to watch, listen to, read or visit (a playlist, a video, "
-    "a track, an article, a page, a product) rather than for an answer to a question — and you have the exact "
-    "address of the best match, finish your reply with one extra line, on its own line, of the form "
-    "OPEN: https://... . Copy the address verbatim, put no punctuation after it, and never wrap it in backticks. "
-    "That line is removed automatically before the reply is shown or spoken, so do not mention it or read it "
-    "aloud. For purely factual questions, open nothing. Never guess an address: if you do not have the exact one, "
-    "say so instead. Do not write the word OPEN for anything else."
+    "a track, an article, a page, a product) rather than for an answer to a question — and one of the numbered "
+    "candidates fits, finish your reply with one extra line, on its own line, of the form OPEN: <number> "
+    "(for example OPEN: 3), using the candidate number exactly as shown. Never write the URL. Prefer a playlist or "
+    "album when the user asked for a collection (hits, mix, all his songs) and a single track or video when they "
+    "named one song; never choose a channel, artist, profile or search page to play music. That line is removed "
+    "automatically before the reply is shown or spoken, so do not mention it or read it aloud. For purely factual "
+    "questions, open nothing. If no candidate fits, say so instead. Do not write the word OPEN for anything else. "
+    "Never name a specific song, video or address as your choice unless it appeared in the candidate list, and never "
+    "say you have nothing to open while candidates are shown to you."
 )
 
 

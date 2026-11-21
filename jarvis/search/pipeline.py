@@ -7,14 +7,14 @@ from .config import (DEEP_MAX_Q, DEEP_MAX_ROUNDS, DEEP_PAGES, DEEP_PAGE_CHARS, D
                      MAX_ROUNDS, PAGES_TO_READ, RELEVANCE_FILTER, SITES, TAVILY_MAX_PER_SEARCH,
                      WEAK_BELOW)
 from .engines import active_providers, diagnose
-from .judging import judge, refine_queries
+from .judging import judge, pick_open, refine_queries
 from .memory import remember_sources
 from .planning import make_plan
 from .ranking import collect, relevant, topic_tokens
 from .reading import describe, extract_job_offers, read_pages
 from .sites import resolve_sites
-from .utils import (OPEN_HINT, address_rows, fallback_job_query, interleave, norm_url, number,
-                    public, strip_sites, trim_total)
+from .utils import (OPEN_HINT, action_query, candidate_rows, fallback_job_query, interleave, needs_forced_search,
+                    norm_url, number, open_candidates, public, stays_local, strip_sites, trim_total, wanted_kind)
 
 
 class WebSearch:
@@ -25,6 +25,7 @@ class WebSearch:
 
     def reset(self):
         self.last_plan, self.last_results, self.last_groups, self.last_ctx = None, [], [], None
+        self.last_open, self.last_pick = [], None
 
     def prefs(self):
         return {"type": "search_prefs", "limit": self.limit, "providers": active_providers()}
@@ -78,6 +79,18 @@ class WebSearch:
         named = bool(sites or unresolved)
         print(f"[plan] intent={plan['intent']} search={plan['search']} sites={[s['name'] for s in sites]} "
               f"unresolved={unresolved} suggest={plan['suggest']} queries={plan['queries']} limit={plan['limit']}")
+        if stays_local(user_text, self.last_open):
+            # 'open his channel' / 'the other one': the candidates on screen are the answer, and a
+            # search for 'his channel' would throw them away.
+            print("[plan] referring to the results on screen: not searching again")
+            plan["search"] = False
+        if needs_forced_search(user_text, plan, self.last_open, named):
+            # The planner files some play/open requests under chit-chat. Without a page the model can
+            # only apologise and improvise a song, so an action always gets a search.
+            print("[plan] action request planned as chit-chat: searching anyway")
+            plan["display"], plan["search"] = "links", True
+            if not plan["queries"]:
+                plan["queries"] = [action_query(user_text)]
         if not plan["search"] and not named:
             return ""
         jobs, news = plan["intent"] == "jobs", plan["intent"] == "news"
@@ -157,6 +170,16 @@ class WebSearch:
         title = (queries[0] + (f" · {n} per site" if len(sites) > 1 else "")) if plan["display"] == "links" \
             else "Sources"
         await self.send({"type": "links", "title": title, "groups": [public(g) for g in shown]})
+        self.last_open = open_candidates(self.last_results, user_text)
+        self.last_pick = None
+        if len(self.last_open) > 1 and wanted_kind(user_text):
+            # A dedicated, constrained decision beats hoping the prose generation remembers the right link.
+            pick_n, why = await pick_open(self.llm_url, user_text, self.last_open)
+            if pick_n:
+                self.last_pick = next((c for c in self.last_open if c["n"] == pick_n), None)
+                if self.last_pick:
+                    print(f"[open] pick #{pick_n} [{self.last_pick['kind']}] "
+                          f"{self.last_pick['title'][:60]} — {why}")
         flat = interleave(shown)
         failed = [g["site"] for g in shown if g["status"] == "failed" and not g["items"]]
         if not flat:
@@ -201,10 +224,10 @@ class WebSearch:
             body = f"\n\n[{'DEEP RESEARCH' if deep else 'SEARCH'} RESULTS for \"{queries[0]}\"]\n{found}\n"
             if deep:
                 body += "\n\n".join(blk(i, r) for i, r in enumerate(top)) + "\n"
-            rows = address_rows(flat)
-            if rows:
-                body += ("\n[EXACT ADDRESSES, in the order shown on screen]\n" + rows +
-                         "\n[END ADDRESSES]\n" + OPEN_HINT)
+            cands = open_candidates(flat, user_text)
+            if cands:
+                body += ("\n[OPEN CANDIDATES, numbered as on screen]\n" + candidate_rows(cands) +
+                         "\n[END CANDIDATES]\n" + OPEN_HINT)
             how = ("The pages of the best results were opened and read: point out the strongest ones and say what "
                    "each really contains (requirements, dates, salary, what the page is about), in a few short "
                    "sentences. " if deep else
@@ -215,8 +238,9 @@ class WebSearch:
                     (f" These sites failed and have a Retry button: {', '.join(failed)}." if failed else "") +
                     " Never read URLs aloud.")
         blocks = [blk(i, r) for i, r in enumerate(flat)]
-        rows = address_rows(flat, 5)
-        addrs = ("\n[EXACT ADDRESSES]\n" + rows + "\n[END ADDRESSES]\n" + OPEN_HINT) if rows else ""
+        cands = open_candidates(flat, user_text, 5)
+        addrs = ("\n[OPEN CANDIDATES]\n" + candidate_rows(cands) +
+                 "\n[END CANDIDATES]\n" + OPEN_HINT) if cands else ""
         return (f"\n\n[{'DEEP RESEARCH' if deep else 'WEB SEARCH'} RESULTS, fetched {date.today():%d %B %Y}]\n" +
                 "\n\n".join(blocks) + "\n[END OF RESULTS]" + addrs + "\n\nAnswer the message above using these "
                 "results. Give the "
@@ -231,20 +255,21 @@ class WebSearch:
         await self.send({"type": "note", "text": "Reading result " + ", ".join(f"#{r['n']}" for r in chosen)})
         pages = await read_pages(chosen)
         blocks = [describe(r, pages[i] if i < len(pages) else "") for i, r in enumerate(chosen)]
-        rows = address_rows(chosen)
-        addrs = ("\n[EXACT ADDRESSES]\n" + rows + "\n[END ADDRESSES]\n" + OPEN_HINT) if rows else ""
+        cands = open_candidates(chosen, (self.last_ctx or {}).get("request", ""))
+        addrs = ("\n[OPEN CANDIDATES]\n" + candidate_rows(cands) +
+                 "\n[END CANDIDATES]\n" + OPEN_HINT) if cands else ""
         return ("\n\n[SELECTED RESULTS]\n" + "\n\n".join(blocks) + "\n[END]" + addrs +
                 "\n\nAnswer the user's request about these "
                 "selected results (summarize, list requirements, compare...). Never read URLs aloud. If a page text "
                 "is missing, work from the snippet and say so.")
 
-    def address_block(self, n=5):
-        """Addresses from the previous search, so 'open the second one' still works without searching again."""
-        rows = address_rows(self.last_results, n)
-        if not rows:
+    def address_block(self, text=None, n=5):
+        """Candidates from the previous search, so 'open the second one' still works without searching again."""
+        cands = open_candidates(self.last_results, text, n)
+        if not cands:
             return ""
-        return ("\n\n[ADDRESSES FROM THE LAST SEARCH — the results numbered on screen]\n" + rows +
-                "\n[END ADDRESSES]" + OPEN_HINT)
+        return ("\n\n[OPEN CANDIDATES FROM THE LAST SEARCH — numbered as on screen]\n" + candidate_rows(cands) +
+                "\n[END CANDIDATES]" + OPEN_HINT)
 
     async def retry(self, site_name, lang=None):
         """Re-runs one failed site with the same queries, bypassing the cache, and updates its card."""
@@ -262,6 +287,8 @@ class WebSearch:
             self.last_results = [r for r in self.last_results if r not in old["items"]]
             number([new], max([r.get("n", 0) for r in self.last_results] + [0]) + 1)
             self.last_results += new["items"]
+            self.last_open = open_candidates(self.last_results, ctx.get("request", ""))
+            self.last_pick = None
             self.last_groups[self.last_groups.index(old)] = new
             await self.send({"type": "links_update", "group": public(new)})
         except Exception as e:

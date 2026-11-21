@@ -12,8 +12,12 @@ from .chats import CHATS, chats_msg, llm_message, new_chat_id, rich_to_llm, save
 from .config import (CTX, LANGS, LLM_URL, MAX_HISTORY, SYSTEM_PROMPT, settings)
 from .directives import OpenDirective
 from .search import WebSearch
+from .search.utils import kind_rank, page_kind, refers_to_results, wanted_kind
 from .speech import Speaker, stt_pool, transcribe
-from .textutil import guess_text_lang, is_junk, same_url, url_key
+from .textutil import content_key, guess_text_lang, is_junk, same_target
+
+CORRECTION_RE = re.compile(r"\b(no|not that|not this|not the|wrong|instead|the other|another|pas celui|pas celle|"
+                           r"pas cette|l'autre|un autre|otro|otra|no ese|no esa|no este)\b", re.I)
 
 
 class Session:
@@ -31,6 +35,7 @@ class Session:
         self.send_lock = asyncio.Lock()
         self.links = None            # source cards shown during this turn (site -> group), saved with the reply
         self.links_title = ""
+        self.last_opened = []        # tabs opened last turn, so "no, the other one" can exclude them
 
     async def send(self, obj):
         kind = obj.get("type")
@@ -170,6 +175,7 @@ class Session:
 
     async def run_turn(self, user_text, lang):
         self.last_lang = lang
+        self.search.last_pick = None      # a pick belongs to the search that produced it
         self.epoch += 1
         ep = self.epoch
         images = self.pending_images          # images attached since the last message
@@ -208,7 +214,7 @@ class Session:
             if self.web:
                 extra = await self.search.context(user_text, self.history, lang, deep=self.deep)
                 if not extra:                     # no new search: still allow "open the second one"
-                    extra = self.search.address_block()
+                    extra = self.search.address_block(user_text)
                 if extra:
                     last = self.history[-1]
                     messages[-1] = llm_message({**last, "content": last["content"] + extra})
@@ -259,6 +265,7 @@ class Session:
             ok = True
             urls = self._open_urls(opened, user_text)
             if urls:                                   # the model picked a page: put it on screen
+                self.last_opened = urls
                 for u in urls:
                     try:
                         await asyncio.to_thread(webbrowser.open_new_tab, u)
@@ -309,26 +316,94 @@ class Session:
             except Exception:
                 pass
 
-    def _open_urls(self, urls, user_text):
-        """Only addresses that really came past us: a search result, or something the user gave."""
-        pool = [r.get("url") or "" for r in (getattr(self.search, "last_results", None) or [])]
+    def _resolve_tokens(self, tokens):
+        """'#3' -> the URL of result 3 on screen; anything else is already an address."""
+        out = []
+        for t in tokens or []:
+            if not isinstance(t, str):
+                continue
+            if t.startswith("#"):
+                try:
+                    n = int(t[1:])
+                except ValueError:
+                    continue
+                r = next((x for x in (self.search.last_results or []) if x.get("n") == n), None)
+                if r:
+                    out.append(r["url"])
+                else:
+                    print("[open skipped, no candidate #%d on screen]" % n)
+            else:
+                out.append(t)
+        return out
+
+    @staticmethod
+    def _kind_allowed(url, want):
+        """A channel page cannot play a playlist; a video is not someone's channel page."""
+        kind = page_kind(url)
+        if want in ("collection", "item", "open"):
+            return kind not in ("channel", "artist", "profile", "search")
+        if want == "channel":
+            return kind in ("channel", "artist", "profile")
+        return True
+
+    def _open_urls(self, tokens, user_text):
+        """Resolve OPEN: <number>/<url>, then keep only addresses that really came past us.
+
+        The picker's choice wins over the reply's. A correction ('no, the other one') excludes the
+        tab opened last turn and falls back to the next eligible candidate.
+        """
+        urls = self._resolve_tokens(tokens)
+        pick = getattr(self.search, "last_pick", None)
+        if pick and pick.get("url"):
+            if urls and not any(same_target(u, pick["url"]) for u in urls if u.lower().startswith("http")):
+                print("[open] the reply chose another link; the picker's choice wins")
+            urls = [pick["url"]]
+        if not (pick or wanted_kind(user_text) or refers_to_results(user_text)):
+            # A factual question never gets a tab, whatever the reply asked for: 'who produced those
+            # albums?' must not open a Wikipedia page just because the model offered one.
+            if urls:
+                print("[open skipped, the user did not ask to open anything]")
+            return []
+        pool = [r.get("url") or "" for r in (self.search.last_results or [])]
         for m in self.history:
             pool += re.findall(r"https?://[^\s<>\"']+", m.get("content") or "")
         pool += re.findall(r"https?://[^\s<>\"']+", user_text or "")
-        out, seen = [], set()
-        for u in urls:
-            if not re.match(r"^https?://", u, re.I) or len(u) > 2000:
-                continue
-            if not any(same_url(u, p) for p in pool if p):
+        ctx = getattr(self.search, "last_ctx", None) or {}
+        want = wanted_kind(user_text)
+        ctx_want = wanted_kind(ctx.get("request", ""))
+        if want in (None, "open") and ctx_want:      # "open the second one" inherits the earlier intent
+            want = ctx_want
+        exclude = self.last_opened if CORRECTION_RE.search(user_text or "") else []
+        seen = set()
+
+        def usable(u):
+            if not re.match(r"^https?://", u or "", re.I) or len(u) > 2000:
+                return False
+            if not any(same_target(u, p) for p in pool if p):
                 print("[open skipped, not a known address]", u)
-                continue
-            k = url_key(u)
-            if k in seen:
-                continue
-            seen.add(k)
-            out.append(u)
-            if len(out) >= 2:                     # two tabs at most: this is a butler, not a pop-up farm
-                break
+                return False
+            if not self._kind_allowed(u, want):
+                print("[open skipped, wrong kind of page for this request]", u)
+                return False
+            if any(same_target(u, e) for e in exclude if e):
+                print("[open skipped, just rejected]", u)
+                return False
+            return content_key(u) not in seen
+
+        allow_fallback = bool(pick) or any(str(t).startswith("#") for t in (tokens or [])) or bool(exclude)
+        out = []
+        for u in urls:
+            if usable(u):
+                seen.add(content_key(u))
+                out.append(u)
+                if len(out) >= 2:
+                    break
+        if not out and urls and allow_fallback:  # the chosen one was rejected: take the next best
+            for c in sorted((getattr(self.search, "last_open", None) or []),
+                            key=lambda c: kind_rank(c["kind"], want)):
+                if usable(c["url"]):
+                    out.append(c["url"])
+                    break
         return out
 
     def _ensure_room(self):

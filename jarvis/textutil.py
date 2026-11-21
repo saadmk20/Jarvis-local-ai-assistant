@@ -1,5 +1,6 @@
 """Pure text helpers: display cleaning, sentence splitting, language guessing, URL identity."""
 import re
+from urllib.parse import parse_qsl, urlparse
 
 from .config import JUNK, settings
 
@@ -43,17 +44,47 @@ def pop_sentences(buf):
     return out, buf
 
 
+# Params that never change which page is shown: asking for a timestamp must not break the match.
+HARMLESS_PARAMS = frozenset({
+    "t", "start", "si", "feature", "ref", "fbclid", "gclid",
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+})
+
+
 def url_key(u):
-    """Loose identity for a URL: scheme, www, fragment and trailing slash do not matter."""
-    u = (u or "").split("#")[0].strip().rstrip("/").lower()
-    return re.sub(r"^https?://(www\.)?", "", u)
+    """Loose identity for a URL: scheme, www, fragment and trailing slash do not matter.
+    Host is lower-cased; path and query keep their case, because ids such as YouTube's
+    `v=` and `list=` are case-sensitive."""
+    u = (u or "").split("#")[0].strip().rstrip("/")
+    m = re.match(r"^https?://([^/]+)(/.*)?$", u, re.I)
+    if not m:
+        return u
+    return m.group(1).lower().removeprefix("www.") + (m.group(2) or "")
 
 
-def same_url(a, b):
-    a, b = url_key(a), url_key(b)
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-    short, long_ = (a, b) if len(a) <= len(b) else (b, a)
-    return len(short) >= 12 and long_.startswith(short)   # a dropped ?query or extra path segment
+def _target(u):
+    p = urlparse(u or "")
+    host = p.netloc.lower().removeprefix("www.")
+    path = p.path.rstrip("/")
+    q = tuple(sorted((k, v) for k, v in parse_qsl(p.query) if k not in HARMLESS_PARAMS))
+    return host, path, q
+
+
+def same_target(typed, known):
+    """The model's address must point at exactly the page we know, not a truncation of it.
+
+    `https://youtube.com/playlist` must NOT match `…/playlist?list=PL1` (that tab would open
+    YouTube's generic page), while adding `&t=30` to a known video still matches.
+    """
+    a, b = _target(typed), _target(known)
+    return bool(a[0]) and a == b
+
+
+def content_key(u):
+    """Identity of the actual media, so youtube.com and music.youtube.com copies collapse."""
+    q = dict(parse_qsl(urlparse(u or "").query))
+    if q.get("list"):
+        return "list:" + q["list"]
+    if q.get("v"):
+        return "video:" + q["v"]
+    return "url:" + url_key(u)

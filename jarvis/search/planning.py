@@ -74,6 +74,13 @@ REFINE_SCHEMA = {
 }
 
 
+PICK_SCHEMA = {
+    "type": "object",
+    "properties": {"pick": {"type": "integer", "minimum": 0}, "why": {"type": "string"}},
+    "required": ["pick", "why"],
+}
+
+
 def norm_plan(raw, user_text):
     intent = raw.get("intent") if raw.get("intent") in ("news", "jobs", "general") else "general"
     queries = [re.sub(r"\bsite:\S+", " ", q).strip() for q in (raw.get("queries") or []) if isinstance(q, str)]
@@ -125,7 +132,9 @@ async def make_plan(llm_url, user_text, history, last_plan, last_results):
         f"Today is {date.today():%A %d %B %Y}. You plan web searches for a voice assistant.\n"
         "Fill the JSON fields for the user's last message:\n"
         "- search: true if it needs the web (news, current events, jobs, prices, scores, weather, recent facts, "
-        "products, people, research). false for greetings, chit-chat, coding and timeless knowledge.\n"
+        "products, people, research) or if the user wants something played, watched or opened (music, a playlist, "
+        "a video, an album, a page, a product) — that always needs a real link. false for greetings, chit-chat, "
+        "coding and timeless knowledge.\n"
         "- intent: news, jobs (jobs, internships, stages, PFE, recruitment) or general.\n"
         "- queries: 1 to 4 SHORT keyword queries, each 2 to 5 words. If the message names several skills, subjects "
         "or fields, give each one its own query instead of stacking them ('data science, AI, data analyst, BI' = "

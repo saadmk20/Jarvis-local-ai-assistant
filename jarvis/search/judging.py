@@ -2,7 +2,7 @@
 
 from .config import JUDGE_CHUNK
 
-from .planning import JUDGE_SCHEMA, REFINE_SCHEMA, llm_json
+from .planning import JUDGE_SCHEMA, PICK_SCHEMA, REFINE_SCHEMA, llm_json
 
 
 async def judge(llm_url, request, queries, items):
@@ -50,3 +50,35 @@ async def refine_queries(llm_url, request, tried, samples):
         'site: operators, and do not repeat the old queries. Reply with JSON {"queries": [...]}.')
     out = await llm_json(llm_url, prompt, REFINE_SCHEMA, "refine", 200, 90)
     return [q.strip() for q in (out or {}).get("queries", []) if isinstance(q, str) and q.strip()][:3]
+
+
+async def pick_open(llm_url, request, candidates):
+    """One constrained decision: which candidate, if opened, does what the user asked?
+
+    candidates: [{"n", "kind", "title", "source"}]. Returns (n or None, reason).
+    This is separate from the reply generation on purpose: the model should not have to both
+    write prose and remember which of six similar YouTube links is the right one.
+    """
+    if not candidates:
+        return None, ""
+    if len(candidates) == 1:
+        return candidates[0]["n"], "only candidate"
+    valid = {c["n"] for c in candidates}
+    lines = "\n".join(f"{c['n']}. [{c['kind']}] {c['title']}" + (f" — {c['source']}" if c["source"] else "")
+                      for c in candidates)
+    prompt = (
+        f"User request: {request}\n\n"
+        f"Candidates:\n{lines}\n\n"
+        "Which single candidate should be opened in the browser to do what the user asked? Rules:\n"
+        "- Asked for a collection (playlist, album, hits, best of, mix, all his songs): choose the playlist or album.\n"
+        "- Named one song or track: choose that track or video, not a playlist of something else.\n"
+        "- Never choose a channel, artist, profile or search page to play music, unless the user asked for that "
+        "channel or artist itself.\n"
+        "- Choose 0 if none of them can satisfy the request.\n"
+        'Reply with JSON {"pick": <number>, "why": "<at most 12 words>"}.')
+    out = await llm_json(llm_url, prompt, PICK_SCHEMA, "pick", 120, 45)
+    try:
+        n = int((out or {}).get("pick") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return (n if n in valid else None), str((out or {}).get("why") or "")[:120]

@@ -24,10 +24,10 @@ class OpenDirective:
         out = []
         for ch in piece:
             if self.in_dir:
-                if not self.confirmed:            # "OPEN:" alone proves nothing: wait for the address
+                if not self.confirmed:            # "OPEN:" alone proves nothing: wait for the address/number
                     if ch in " \t":
                         continue
-                    if ch in "hH\"'<":            # http://  "http…  <http…
+                    if ch in "hH\"'<" or ch.isdigit() or ch in "#[":   # http://  "http…  <http…  or #3 / 3
                         self.confirmed = True
                         self.dir += ch
                         continue
@@ -60,6 +60,10 @@ class OpenDirective:
         m = re.search(r"https?://[^\s<>\"'`]+", self.dir, re.I)
         if m:
             self.urls.append(m.group(0).rstrip(").,;:!?"))
+        else:                                     # a candidate number, as "OPEN: 3" or "OPEN: #3"
+            n = re.fullmatch(r"\s*#?\s*(\d{1,3})\s*", self.dir)
+            if n:
+                self.urls.append("#" + n.group(1))
         self.dir = ""
         self.in_dir = False
         self.confirmed = False
