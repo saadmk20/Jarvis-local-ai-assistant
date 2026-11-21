@@ -1,0 +1,25 @@
+# secrets and personal state
+.env
+token.txt
+chats.json
+app_settings.json
+source_memory.json
+known_sites.json
+
+# voice clones and generated audio (large / personal)
+*.wav
+Voices/
+voices/
+*.safetensors
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# editors / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
