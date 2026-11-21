@@ -1,7 +1,11 @@
 """JARVIS voice assistant (multilingual): web UI + Whisper (CPU) + llama-server + Pocket TTS.
 
-Run:  python voice_app.py   then open http://127.0.0.1:7860
-Keep index.html next to this file. Put your voices in the "voices" folder next to it.
+Old single-file version, kept for reference only. The maintained app is
+voie_chat_web.py + the `jarvis` package at the project root.
+
+Run from the project root:  python legacy/voice_chat.py   then open http://127.0.0.1:7860
+It shares the root data files: index.html, app_settings.json and the "voices" folder
+all live one level up, not next to this file.
 """
 import asyncio
 import json
@@ -22,7 +26,7 @@ from faster_whisper import WhisperModel
 from pocket_tts import TTSModel, export_model_state
 
 # ------------------------------------------------------------------ settings
-HERE = Path(__file__).parent
+HERE = Path(__file__).resolve().parent.parent      # data files live at the project root
 VOICES_DIR = HERE / "voices"
 SETTINGS_FILE = HERE / "app_settings.json"
 LLAMA_EXE = Path(r"F:\AI\Prism\llama-server.exe")

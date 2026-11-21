@@ -174,6 +174,7 @@ Index.html                  the UI (sidebar chats, dashboard, link cards, image 
 .env.example                template for API keys and endpoints
 source_memory.json          learned sources per intent (generated at runtime)
 known_sites.json            name → domain map, auto-extended by the learning loop (generated)
+legacy/voice_chat.py        the original single-file version, kept for reference (unmaintained)
 ```
 
 The `jarvis.search` package has no imports from the rest of the app: it takes a `send`
