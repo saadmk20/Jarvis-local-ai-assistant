@@ -4,11 +4,10 @@ import re
 
 import httpx
 
-from .config import JUDGE_CHUNK, MAX_LIMIT, SITES
+from .config import JUDGE_CHUNK, MAX_LIMIT
 from .memory import memory_line
 from .sites import detect_sites
-from .utils import (AI_SYN, JOBS_RE, LIMIT_RE, NEWS_WORDS, RETRY_RE, STOP, SYN,
-                    fallback_job_query, fold, word_in)
+from .utils import JOBS_RE, LIMIT_RE, NEWS_WORDS, RETRY_RE, fallback_job_query, fold
 
 
 async def llm_json(llm_url, prompt, schema, name, max_tokens=300, timeout=90):

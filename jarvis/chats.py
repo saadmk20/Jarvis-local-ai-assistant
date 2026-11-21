@@ -1,9 +1,8 @@
 """Saved conversations: the on-disk store, chat summaries and rich -> LLM conversion."""
 import json
 import secrets
-import time
 
-from .config import CHATS_FILE, CTX, SYSTEM_PROMPT
+from .config import CHATS_FILE, SYSTEM_PROMPT
 
 
 CHATS = {}                     # id -> {"title": str, "created": ts, "messages": [rich msg...]}

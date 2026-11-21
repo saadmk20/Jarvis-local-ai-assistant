@@ -6,11 +6,11 @@ from .config import (DEEP_MAX_Q, DEEP_MAX_ROUNDS, DEEP_PAGES, DEEP_PAGE_CHARS, D
                      DEFAULT_LIMIT, FALLBACK_JOB_BOARDS, JUDGE_ENABLED, MAX_LIMIT, MAX_JUDGED,
                      MAX_ROUNDS, PAGES_TO_READ, RELEVANCE_FILTER, SITES, TAVILY_MAX_PER_SEARCH,
                      WEAK_BELOW)
-from .engines import active_providers, diagnose, run_search
+from .engines import active_providers, diagnose
 from .judging import judge, refine_queries
 from .memory import remember_sources
 from .planning import make_plan
-from .ranking import collect, fuse, relevant, topic_tokens
+from .ranking import collect, relevant, topic_tokens
 from .reading import describe, extract_job_offers, read_pages
 from .sites import resolve_sites
 from .utils import (OPEN_HINT, address_rows, fallback_job_query, interleave, norm_url, number,

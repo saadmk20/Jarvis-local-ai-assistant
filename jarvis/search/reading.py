@@ -1,10 +1,7 @@
 """Page fetching ladder and reading: plain HTTP, trafilatura, then a real stealth browser."""
 import asyncio
-import re
 
-import httpx
-
-from .config import PAGE_CHARS, PAGES_TO_READ, UA
+from .config import PAGE_CHARS
 from .engines import http
 from .planning import llm_json
 

@@ -1,8 +1,7 @@
 """Text normalisation, URL identity and the numbering of displayed results."""
-import difflib
 import re
 import unicodedata
-from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 import httpx
 

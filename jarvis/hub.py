@@ -2,9 +2,6 @@
 sessions = set()
 
 
-sessions = set()
-
-
 async def broadcast(obj):
     for s in list(sessions):
         try:

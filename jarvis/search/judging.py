@@ -1,7 +1,6 @@
 """The local model judges results against the request and can ask for better queries."""
-import json
 
-from .config import JUDGE_CHUNK, JUDGE_ENABLED, MAX_JUDGED
+from .config import JUDGE_CHUNK
 
 from .planning import JUDGE_SCHEMA, REFINE_SCHEMA, llm_json
 

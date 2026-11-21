@@ -5,11 +5,9 @@ import struct
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from faster_whisper import WhisperModel
 from pocket_tts import TTSModel, export_model_state
 
-from .config import (BUILTIN, DEFAULT_VOICE_AUDIO, LANGS, MIN_CHARS, STT_MODEL, VOICES_DIR,
-                     settings)
+from .config import BUILTIN, DEFAULT_VOICE_AUDIO, LANGS, MIN_CHARS, VOICES_DIR, settings
 from .textutil import clean, pop_sentences
 
 

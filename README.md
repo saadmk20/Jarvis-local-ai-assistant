@@ -13,7 +13,7 @@ context windows.
 you (voice or text) ──> Whisper STT ──> local LLM (27B, llama.cpp) ──> planned answer
                                               │                            │
                                     web search engine                  Pocket TTS
-                                    (websearch.py)                     (cloned voices)
+                                    (jarvis/search)                    (cloned voices)
                                               │
               ┌───────────────┬───────────────┴──────────────┐
               ddgs            self-hosted SearXNG           Tavily (paid,

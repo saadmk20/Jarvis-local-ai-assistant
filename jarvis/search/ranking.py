@@ -3,21 +3,9 @@ import asyncio
 import re
 from urllib.parse import quote_plus, urlparse
 
-from .config import BLOCKED, DEEP_FETCH, MAX_JUDGED
+from .config import BLOCKED, DEEP_FETCH
 from .engines import active_providers, run_search
-from .utils import (GENERIC, STOP, SYN, fold, fuse, item, norm_url, short, word_in)
-
-
-def fuse(lists, k=60):
-    """Reciprocal rank fusion over the results of several query variants, de-duplicated by URL."""
-    score, best = {}, {}
-    for lst in lists:
-        for rank, r in enumerate(lst):
-            key = norm_url(r["url"])
-            score[key] = score.get(key, 0) + 1 / (k + rank + 1)
-            if key not in best or len(r["snippet"]) > len(best[key]["snippet"]):
-                best[key] = r
-    return [best[x] for x in sorted(score, key=score.get, reverse=True)]
+from .utils import (GENERIC, STOP, SYN, fold, fuse, norm_url, short, word_in)
 
 
 def topic_tokens(queries, sites):

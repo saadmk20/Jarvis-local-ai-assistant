@@ -1,12 +1,8 @@
 """Named-site detection and resolution: "on LinkedIn and ReKrute" -> domains to search."""
-import asyncio
 import difflib
 import json
 import re
-from pathlib import Path
 from urllib.parse import urlparse
-
-import httpx
 
 from .config import ALIAS_MAP, ROOT, SITES
 from .engines import run_search

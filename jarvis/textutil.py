@@ -1,7 +1,7 @@
 """Pure text helpers: display cleaning, sentence splitting, language guessing, URL identity."""
 import re
 
-from .config import JUNK, LANGS, settings
+from .config import JUNK, settings
 
 
 def is_junk(text):

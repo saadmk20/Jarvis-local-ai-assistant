@@ -12,7 +12,7 @@ from faster_whisper import WhisperModel
 
 from . import speech
 from .chats import CHATS, load_chats
-from .config import (HERE, LANGS, MAX_LIMIT, MODELS_DIR, STT_MODEL, VOICES_DIR, WEB_PORT,
+from .config import (HERE, LANGS, MAX_LIMIT, STT_MODEL, VOICES_DIR, WEB_PORT,
                      load_settings, save_settings, settings)
 from .hub import broadcast, sessions
 from .llm import list_models, llama, startup_llama
@@ -33,7 +33,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 def _load_token():
-    """Access key: JARVIS_TOKEN env var if set, else token.txt next to this file
+    """Access key: JARVIS_TOKEN env var if set, else token.txt in the project folder
     (created automatically on first run with a random value)."""
     tok = os.environ.get("JARVIS_TOKEN", "").strip()
     if tok:

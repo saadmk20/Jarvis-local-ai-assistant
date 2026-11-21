@@ -1,18 +1,12 @@
 """Search providers (ddgs, searxng, tavily): health, pacing, caching and the fetch itself."""
 import asyncio
-import json
-import re
 import time
-from urllib.parse import quote_plus
 
 import httpx
 
-from .config import (
-    CACHE_TTL, COOLDOWN, DDG_REGION, DEEP_FETCH, DEEP_GAPS, DEEP_MAX_Q, DEEP_TAVILY,
-    FALLBACK_JOB_BOARDS, GAPS, MAX_LIMIT, PROVIDER_ORDER, RELEVANCE_FILTER, SEARXNG_URL, SITES,
-    TAVILY_API_KEY, TAVILY_MAX_PER_SEARCH, TAVILY_ONLY_ON_FAILURE, UA,
-)
-from .utils import fold, fuse, item, norm_url, short, strip_sites
+from .config import (CACHE_TTL, COOLDOWN, DDG_REGION, DEEP_GAPS, GAPS, PROVIDER_ORDER,
+                     SEARXNG_URL, TAVILY_API_KEY, TAVILY_ONLY_ON_FAILURE, UA)
+from .utils import fold, fuse, item, short
 
 
 try:

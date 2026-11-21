@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]     # project folder: .env, Index.htm
 
 
 def _load_env():
-    """Reads KEY=VALUE lines from a .env file next to this module (real environment variables win)."""
+    """Reads KEY=VALUE lines from the .env in the project folder (real environment variables win)."""
     f = ROOT / ".env"
     try:
         for line in f.read_text(encoding="utf-8").splitlines():
