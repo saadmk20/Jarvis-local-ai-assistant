@@ -147,10 +147,36 @@ to both the web page and the websocket.
 ## Project structure
 
 ```
-voie_chat_web.py     voice + chat server (FastAPI, websocket, STT/TTS, LLM, vision, token gate)
-websearch.py         the search engine (planner, providers, fusion, judge, fetch ladder, memory)
-Index.html           the UI (sidebar chats, dashboard, link cards, image attach)
-.env.example         template for API keys and endpoints
-source_memory.json   learned sources per intent (generated at runtime)
-known_sites.json     name → domain map, auto-extended by the learning loop (generated)
+voie_chat_web.py            launcher: `python voie_chat_web.py`
+jarvis/
+  server.py                 FastAPI app: token gate, index page, websocket endpoint, startup
+  session.py                one browser connection: chat lifecycle and a streamed turn
+  speech.py                 Whisper STT, Pocket TTS voices, the sentence speaker
+  llm.py                    llama-server lifecycle (launch, switch, stop)
+  chats.py                  saved conversations, chat summaries, rich → LLM conversion
+  config.py                 paths, tunables, prompts, language table, saved settings
+  textutil.py               display cleaning, sentence splitting, language guessing
+  directives.py             in-band directives (e.g. `OPEN: <url>`) stripped before speaking
+  hub.py                    the live-session registry used for broadcasts
+  search/
+    pipeline.py             WebSearch: plan → search → fuse → judge → read → answer
+    planning.py             the model turns a sentence into sites, queries and limits
+    engines.py              providers (ddgs, searxng, tavily), health, pacing, cache
+    ranking.py              fusion, relevance scoring, per-source collection
+    judging.py              the model judges results and asks for better queries
+    reading.py              page fetch ladder and reading (HTTP, trafilatura, stealth browser)
+    sites.py                named-site detection and resolution
+    memory.py               learned sources per intent
+    utils.py                text normalisation, URL identity, numbering of results
+    config.py               search tunables, site catalog, .env loading
+websearch.py                compatibility shim for the old import path
+Index.html                  the UI (sidebar chats, dashboard, link cards, image attach)
+.env.example                template for API keys and endpoints
+source_memory.json          learned sources per intent (generated at runtime)
+known_sites.json            name → domain map, auto-extended by the learning loop (generated)
 ```
+
+The `jarvis.search` package has no imports from the rest of the app: it takes a `send`
+callback and an LLM URL, so it can be tested or reused on its own. The app package never
+imports `websearch.py`; that file only keeps old scripts working.
+
