@@ -8,9 +8,11 @@ known_sites.json
 
 # voice clones and generated audio (large / personal)
 *.wav
-Voices/
-voices/
+Voices/*
 *.safetensors
+# the two JARVIS voices are part of the project; every other clone stays local
+!Voices/jarvis.safetensors
+!Voices/jarvis.fr.safetensors
 
 # python
 __pycache__/
