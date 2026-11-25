@@ -1,5 +1,8 @@
 """Page fetching ladder and reading: plain HTTP, trafilatura, then a real stealth browser."""
 import asyncio
+import os
+import time
+from urllib.parse import urlparse
 
 from .config import PAGE_CHARS
 from .engines import http
@@ -19,6 +22,8 @@ except ImportError:
 
 
 STEALTH_MAX = 3                    # stealth-browser fetches per deep search (slow, one at a time)
+
+READ_LOG = os.environ.get("JARVIS_READ_LOG", "1") != "0"   # per-page ladder log; set 0 to silence
 
 
 _scrap_sem = asyncio.Semaphore(1)
@@ -57,6 +62,16 @@ async def read_pages(results, total=None, chars=None, deep=False):
     def extract(html):
         return trafilatura.extract(html, include_comments=False, include_tables=False) or ""
 
+    def host_of(r):
+        return urlparse(r.get("url") or "").netloc.removeprefix("www.")
+
+    def note(r, rung, text, t0, capped=False):
+        """One line per page: which rung produced the text, how much, and how long it took."""
+        if not READ_LOG:
+            return
+        print(f"[read] {rung:<12}{len(text):>6} chars {time.perf_counter() - t0:>5.1f}s  {host_of(r)}"
+              + ("  (stealth cap reached)" if capped else ""))
+
     async def plain(url):
         r = await http().get(url, timeout=7)
         if r.status_code != 200 or "html" not in r.headers.get("content-type", ""):
@@ -65,17 +80,25 @@ async def read_pages(results, total=None, chars=None, deep=False):
 
     async def one(r):
         async with sem:
-            url = r["url"]
+            url, t0, capped = r["url"], time.perf_counter(), False
+
+            def done(text, rung):
+                note(r, rung, text, t0, capped)
+                return text[:chars or PAGE_CHARS], rung, capped
+
             try:
                 text = await plain(url)
             except Exception:
                 text = ""
             if len(text) >= 250 or (AsyncFetcher is None and StealthyFetcher is None):
-                return text[:chars or PAGE_CHARS]
+                return done(text, "http")
             try:                                 # page failed, blocked or is a JS shell: ladder
                 for stealth in (False, True):
                     if stealth:
-                        if StealthyFetcher is None or stealth_left[0] <= 0:
+                        if StealthyFetcher is None:
+                            continue
+                        if stealth_left[0] <= 0:
+                            capped = True        # budget spent: this page keeps what httpx got
                             continue
                         async with _scrap_sem:
                             stealth_left[0] -= 1
@@ -87,23 +110,31 @@ async def read_pages(results, total=None, chars=None, deep=False):
                         html = _scrap_html(await AsyncFetcher.get(url, stealthy_headers=True, timeout=30))
                     t = await asyncio.to_thread(extract, html)
                     if t:
-                        return t[:chars or PAGE_CHARS]
+                        return done(t, "stealth" if stealth else "curl_cffi")
             except Exception:
                 pass
-            return text[:chars or PAGE_CHARS]    # whatever the plain attempt got
+            return done(text, "http-partial" if text else "failed")   # whatever the plain attempt got
 
     # per-page timeouts instead of killing the whole batch: one slow stealth fetch must not
     # cost us the pages that already succeeded
     async def safe(i, r):
         try:
-            return i, await asyncio.wait_for(one(r), per_page)
+            text, rung, capped = await asyncio.wait_for(one(r), per_page)
         except Exception:
-            return i, ""
+            text, rung, capped = "", "timeout", False
+            if READ_LOG:
+                print(f"[read] {'timeout':<12}{0:>6} chars {per_page:>5.0f}s  {host_of(r)}")
+        return i, text, rung, capped
 
     out = await asyncio.gather(*(safe(i, r) for i, r in enumerate(results)))
     pages = [""] * len(results)
-    for i, t in out:
-        pages[i] = t
+    tally = {}
+    for i, text, rung, capped in out:
+        pages[i] = text
+        key = rung + ("+cap" if capped else "")
+        tally[key] = tally.get(key, 0) + 1
+    if READ_LOG:
+        print(f"[read] {len(pages)} pages: " + ", ".join(f"{k}={v}" for k, v in sorted(tally.items())))
     return pages
 
 
